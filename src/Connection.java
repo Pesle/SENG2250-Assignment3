@@ -3,8 +3,6 @@ import java.util.concurrent.Semaphore;
 
 public class Connection {
 	
-	private Semaphore simplex = new Semaphore(1, true);
-	
 	private LinkedList<String> connectionToClient;
 	private LinkedList<String> connectionToServer;
 	
@@ -19,24 +17,13 @@ public class Connection {
 	}
 	
 	void transmitToClient(String message) {
-		try {
-			simplex.acquire();
-			connectionToClient.addLast(message);
-			newMessageFromServer = true;
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
-		
+		connectionToClient.addLast(message);
+		newMessageFromServer = true;		
 	}
 	
 	void transmitToServer(String message) {
-		try {
-			simplex.acquire();
-			connectionToServer.addLast(message);
-			newMessageFromClient = true;
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
+		connectionToServer.addLast(message);
+		newMessageFromClient = true;
 	}
 	
 	String receiveFromClient() {
