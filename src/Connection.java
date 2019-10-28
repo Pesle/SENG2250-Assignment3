@@ -19,11 +19,15 @@ public class Connection {
 	void transmitToClient(String message) {
 		connectionToClient.addLast(message);
 		newMessageFromServer = true;		
+		try { Thread.sleep(5); }
+    	catch (InterruptedException e) { e.printStackTrace(); }
 	}
 	
 	void transmitToServer(String message) {
 		connectionToServer.addLast(message);
 		newMessageFromClient = true;
+		try { Thread.sleep(5); }
+    	catch (InterruptedException e) { e.printStackTrace(); }
 	}
 	
 	String receiveFromClient() {

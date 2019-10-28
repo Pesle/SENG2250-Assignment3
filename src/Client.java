@@ -12,7 +12,7 @@ public class Client implements Runnable{
 	private BigInteger RSAn;
 	private BigInteger RSAe;
 	
-	private BigInteger DHa;
+	private BigInteger DHServerKey;
 	private BigInteger DHb;
 	
 	private BigInteger DHp = new BigInteger("17801190547854226652823756245015999014523215636912067427327445031444" + 
@@ -67,7 +67,7 @@ public class Client implements Runnable{
 					}
 					
 					//--Transmit Step 3
-					commLink.transmitToServer(RSAEncode("Client_Hello:"+clientID));
+					commLink.transmitToServer(RSAStringEncode("Client_Hello:"+clientID));
 					
 				}else {
 					//SSL Connection Secured!
@@ -78,7 +78,19 @@ public class Client implements Runnable{
 							String[] message = newMessage.substring(13).split(",");
 							serverID = Integer.parseInt(message[0]);
 							sessionID = Integer.parseInt(message[1]);
-							commLink.transmitToServer(RSAEncode("Client_DH_Public_Vars:"+DHp.toString()+","+DHg.toString()));
+							
+							//--Transmit Step 5 Public Variables
+							commLink.transmitToServer(RSAStringEncode("Client_DH_Public_Vars:Sending"));
+							
+							try { Thread.sleep(20); }
+					    	catch (InterruptedException e) { e.printStackTrace(); }
+							
+							commLink.transmitToServer(RSAIntEncode(DHp));
+							
+							try { Thread.sleep(20); }
+					    	catch (InterruptedException e) { e.printStackTrace(); }
+							
+							commLink.transmitToServer(RSAIntEncode(DHg));
 						}else {
 							System.out.println("Client: Error Occured!");
 							finished = true;
@@ -86,9 +98,9 @@ public class Client implements Runnable{
 						}
 						
 					//--Receive Step 5 Public Key
-					}else if(DHb == null) {
+					}else if(DHServerKey == null) {
 						if(newMessage.contains("Server_DH_Public_Key:")) {
-							DHb = new BigInteger(newMessage.substring(13));
+							DHServerKey = new BigInteger(newMessage.substring(21));
 							
 							//Generate Private Variable
 							Random rand = new SecureRandom();
@@ -97,7 +109,12 @@ public class Client implements Runnable{
 							} while (DHb.compareTo(DHp) >= 0);
 							
 							//--Transmit Step 5 Public Key
-							commLink.transmitToServer(RSAEncode("Client_DH_Public_Key:"+DiffieHellmanKey()));
+							commLink.transmitToServer(RSAStringEncode("Client_DH_Public_Key:Sending"));
+							
+							try { Thread.sleep(20); }
+					    	catch (InterruptedException e) { e.printStackTrace(); }
+							
+							commLink.transmitToServer(RSAIntEncode(DiffieHellmanKey()));
 						}else {
 							System.out.println("Client: Error Occured!");
 							finished = true;
@@ -116,20 +133,32 @@ public class Client implements Runnable{
 		}
 	}
 	
-	private String DiffieHellmanKey() {
-		
-		return null;
+	private BigInteger DiffieHellmanKey() {
+		return DHg.modPow(DHb, DHp);
 	}
 	
-	private String RSAEncode(String input) {
+	private BigInteger convertToBigInt(String input) {
 		BigInteger message = null;
-		//Try to change the input from UTF-8 to bytes which converts to bigIntegers
 		try {
 			message = new BigInteger(input.getBytes("UTF-8"));
-		} catch (UnsupportedEncodingException e) {
+		} catch (Exception e){
 			e.printStackTrace();
 		}
+		return message;
+	}
+	
+	private String RSAStringEncode(String input) {
+		BigInteger message = convertToBigInt(input);
+		//Try to change the input from UTF-8 to bytes which converts to bigIntegers
+		
 		//Encode the message with the public key
 		return message.modPow(RSAe, RSAn).toString();
+	}
+	
+	private String RSAIntEncode(BigInteger input) {
+		//Try to change the input from UTF-8 to bytes which converts to bigIntegers
+		
+		//Encode the message with the public key
+		return input.modPow(RSAe, RSAn).toString();
 	}
 }

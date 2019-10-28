@@ -14,10 +14,15 @@ public class Server implements Runnable{
 
 	private BigInteger RSAp;
 	private BigInteger RSAq;
+	private BigInteger RSAn;
+	private BigInteger RSAm;
+	private BigInteger RSAe;
+	private BigInteger RSAd;
 	
 	private BigInteger DHp;
 	private BigInteger DHg;
 	
+	private BigInteger DHClientKey;
 	private BigInteger DHa;
 	
 	Server(int serverID, int sessionID, Connection commLink){
@@ -76,7 +81,7 @@ public class Server implements Runnable{
 				}else {
 					//SSL Connection Secured!
 					//Decode message
-					String decodedMessage = RSADecode(newMessage);
+					String decodedMessage = RSAStringDecode(newMessage);
 					System.out.println("Client --> Server (SSL): "+decodedMessage);
 					
 					//--Receive Step 3
@@ -93,13 +98,31 @@ public class Server implements Runnable{
 							finished = true;
 						}
 						
-					//--Receive Step 5 Public Keys
+					//--Receive Step 5 Public Variables
 					}else if(DHp == null && DHg == null) {
 						//Verify RSA Connection
-						if(decodedMessage.contains("Client_DH_Public_Vars:")) {
-							String[] message = newMessage.substring(22).split(",");
-							DHp = new BigInteger(message[0]);
-							DHg = new BigInteger(message[1]);
+						if(decodedMessage.contains("Client_DH_Public_Vars:Sending")) {
+							
+							//Wait for the variables to be sent
+							while(true) {
+								try { Thread.sleep(1); }
+						    	catch (InterruptedException e) { e.printStackTrace(); }
+								if(commLink.newMessageFromClient()) {
+									BigInteger variables = RSAIntDecode(commLink.receiveFromClient());
+									
+									try { Thread.sleep(5); }
+							    	catch (InterruptedException e) { e.printStackTrace(); }
+									
+									if(DHp == null) {
+										System.out.println("Client --> Server (SSL): DH p Variable:"+variables.toString());
+										DHp = variables;
+									}else if(DHg == null) {
+										System.out.println("Client --> Server (SSL): DH g Variable:"+variables.toString());
+										DHg = variables; 
+										break;
+									}
+								}
+							}
 							
 							//Generate Private Variable
 							Random rand = new SecureRandom();
@@ -107,7 +130,7 @@ public class Server implements Runnable{
 							    DHa = new BigInteger(DHp.toString().length(), rand);
 							} while (DHa.compareTo(DHp) >= 0);
 							
-							//--Transmit Step 5 Private Key
+							//--Transmit Step 5 Server Key
 							commLink.transmitToClient("Server_DH_Public_Key:"+DiffieHellmanKey());
 						}else {
 							System.out.println("Server: UNAUTHORISED ATTEMPT");
@@ -115,6 +138,32 @@ public class Server implements Runnable{
 							finished = true;
 						}
 						
+					//--Receive Step 5 Client Key
+					}else if(DHClientKey == null) {
+						if(decodedMessage.contains("Client_DH_Public_Key:Sending")) {
+							
+							//Wait for the variables to be sent
+							while(true) {
+								try { Thread.sleep(1); }
+						    	catch (InterruptedException e) { e.printStackTrace(); }
+								if(commLink.newMessageFromClient()) {
+									BigInteger variables = RSAIntDecode(commLink.receiveFromClient());
+									
+									try { Thread.sleep(5); }
+							    	catch (InterruptedException e) { e.printStackTrace(); }
+									
+									System.out.println("Client --> Server (SSL): DH Client Key:"+variables.toString());
+									DHClientKey = variables;
+									break;
+								}
+							}
+						}
+							
+						if(true) {
+							System.out.println("Server: Keys Verified!");
+						}else {
+							System.out.println("Server: DH Key Error!");
+						}
 					}else {
 						finished = true;
 						System.out.println("Server: FINISHED");
@@ -131,34 +180,41 @@ public class Server implements Runnable{
 	}
 	
 	private String DiffieHellmanKey() {
-		
-		return null;
+		return DHg.modPow(DHa, DHp).toString();
 	}
 	
 	private String RSAPublicKey() {
 		String result = "";
-		BigInteger n = RSAp.multiply(RSAq);
-		BigInteger e = new BigInteger("65537");
-		result = n.toString()+","+e.toString();
+		RSAn = RSAp.multiply(RSAq);
+		RSAe = new BigInteger("65537");
+		RSAm = (RSAp.subtract(BigInteger.ONE)).multiply(RSAq.subtract(BigInteger.ONE));
+		RSAd = RSAe.modInverse(RSAm);
+		
+		result = RSAn.toString()+","+RSAe.toString();
 		return result;
 	}
 	
-	private String RSADecode(String input) {
+	private String RSAStringDecode(String input) {		
 		//Convert Input String to Big Integer
 		BigInteger in = new BigInteger(input);
 		
-		BigInteger n = RSAp.multiply(RSAq);
-		BigInteger m = (RSAp.subtract(BigInteger.ONE)).multiply(RSAq.subtract(BigInteger.ONE));
-		BigInteger e = new BigInteger("65537");
-		BigInteger d = e.modInverse(m);
-		
 		//Decode the RSA with private keys
-		BigInteger result = in.modPow(d, n);
+		BigInteger result = in.modPow(RSAd, RSAn);
 		
 		//Convert bytes back to UTF-8
 		byte[] array = result.toByteArray();
-		String message = new String(array, StandardCharsets.UTF_8);
+		String message = new String(array, StandardCharsets.US_ASCII);
 		return message;
+	}
+	
+	private BigInteger RSAIntDecode(String input) {		
+		//Convert Input String to Big Integer
+		BigInteger in = new BigInteger(input);
+		
+		//Decode the RSA with private keys
+		BigInteger result = in.modPow(RSAd, RSAn);
+		
+		return result;
 	}
 	
 }
