@@ -1,5 +1,3 @@
-import java.io.UnsupportedEncodingException;
-
 public class Main {
 	
 	//Messages between the client and server are communicated over this link

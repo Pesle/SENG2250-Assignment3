@@ -1,5 +1,4 @@
 import java.util.LinkedList;
-import java.util.concurrent.Semaphore;
 
 public class Connection {
 	
@@ -18,25 +17,33 @@ public class Connection {
 	
 	void transmitToClient(String message) {
 		connectionToClient.addLast(message);
+		try { Thread.sleep(2); }
+    	catch (InterruptedException e) { e.printStackTrace(); }
 		newMessageFromServer = true;		
-		try { Thread.sleep(5); }
+		try { Thread.sleep(2); }
     	catch (InterruptedException e) { e.printStackTrace(); }
 	}
 	
 	void transmitToServer(String message) {
 		connectionToServer.addLast(message);
+		try { Thread.sleep(2); }
+    	catch (InterruptedException e) { e.printStackTrace(); }
 		newMessageFromClient = true;
-		try { Thread.sleep(5); }
+		try { Thread.sleep(2); }
     	catch (InterruptedException e) { e.printStackTrace(); }
 	}
 	
 	String receiveFromClient() {
 		newMessageFromServer = false;
+		try { Thread.sleep(2); }
+    	catch (InterruptedException e) { e.printStackTrace(); }
 		return connectionToServer.getLast();
 	}
 	
 	String receiveFromServer() {
 		newMessageFromClient = false;
+		try { Thread.sleep(2); }
+    	catch (InterruptedException e) { e.printStackTrace(); }
 		return connectionToClient.getLast();
 	}
 	

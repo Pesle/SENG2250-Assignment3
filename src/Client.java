@@ -1,9 +1,11 @@
-import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
 import java.security.SecureRandom;
 import java.util.Random;
 
+
 public class Client implements Runnable{
+	
+	private EncryptionLibrary lib = new EncryptionLibrary();
 	
 	private final int TTL = 1000;
 	
@@ -12,9 +14,9 @@ public class Client implements Runnable{
 	private BigInteger RSAn;
 	private BigInteger RSAe;
 	
+	private boolean DHVerified;
 	private BigInteger DHServerKey;
 	private BigInteger DHb;
-	
 	private BigInteger DHp = new BigInteger("17801190547854226652823756245015999014523215636912067427327445031444" + 
 			"28657887370207706126952521234630795671567847784664499706507709207278" + 
 			"57050009668388144034129745221171818506047231150039301079959358067395" + 
@@ -26,12 +28,18 @@ public class Client implements Runnable{
 			"08339549231385000036164648264460849230407872181895999905649609776936" + 
 			"8017749273708962006689187956744210730");
 	
+	private BigInteger CBCInitialVector;
+	private BigInteger CBCPreviousVector;
+	
+	private BigInteger CTRValue;
+	
 	private boolean finished;
 
 	Client(int clientID, Connection commLink){
 		finished = false;
 		this.clientID = clientID;
 		this.commLink = commLink;
+		DHVerified = false;
 	}
 	
 	
@@ -56,7 +64,8 @@ public class Client implements Runnable{
 				try { Thread.sleep(5); }
 		    	catch (InterruptedException e) { e.printStackTrace(); }
 				
-				System.out.println("Client <-- Server: "+newMessage);
+				if(CBCInitialVector == null)
+					System.out.println("Client <-- Server: "+newMessage);
 				
 				//--Receive Step 2
 				if(RSAn == null && RSAe == null) {
@@ -64,10 +73,11 @@ public class Client implements Runnable{
 						String[] message = newMessage.substring(6).split(",");
 						RSAn = new BigInteger(message[0]);
 						RSAe = new BigInteger(message[1]);
+						lib.setRSAPublicVars(RSAn, RSAe);
 					}
 					
 					//--Transmit Step 3
-					commLink.transmitToServer(RSAStringEncode("Client_Hello:"+clientID));
+					commLink.transmitToServer(lib.RSAStringEncode("Client_Hello:"+clientID));
 					
 				}else {
 					//SSL Connection Secured!
@@ -80,17 +90,44 @@ public class Client implements Runnable{
 							sessionID = Integer.parseInt(message[1]);
 							
 							//--Transmit Step 5 Public Variables
-							commLink.transmitToServer(RSAStringEncode("Client_DH_Public_Vars:Sending"));
+							commLink.transmitToServer(lib.RSAStringEncode("Client_DH_Public_Vars:Sending"));
 							
-							try { Thread.sleep(20); }
+							try { Thread.sleep(2); }
 					    	catch (InterruptedException e) { e.printStackTrace(); }
 							
-							commLink.transmitToServer(RSAIntEncode(DHp));
+							while(true) {
+								try { Thread.sleep(1); }
+						    	catch (InterruptedException e) { e.printStackTrace(); }
+								if(commLink.newMessageFromServer()) {
+									if(commLink.receiveFromServer().equals("Server_ACK")) {
+										commLink.transmitToServer(lib.RSAIntEncode(DHp));
+										break;
+									}else {
+										System.out.println("Client: Error Occured!");
+										finished = true;
+										break;
+									}
+								}
+							}
 							
-							try { Thread.sleep(20); }
+							try { Thread.sleep(2); }
 					    	catch (InterruptedException e) { e.printStackTrace(); }
 							
-							commLink.transmitToServer(RSAIntEncode(DHg));
+							while(true) {
+								try { Thread.sleep(1); }
+						    	catch (InterruptedException e) { e.printStackTrace(); }
+								if(commLink.newMessageFromServer()) {
+									if(commLink.receiveFromServer().equals("Server_ACK")){
+										commLink.transmitToServer(lib.RSAIntEncode(DHg));
+										break;
+									}else {
+										System.out.println("Client: Error Occured!");
+										finished = true;
+										break;
+									}
+								}
+							}
+							
 						}else {
 							System.out.println("Client: Error Occured!");
 							finished = true;
@@ -101,7 +138,7 @@ public class Client implements Runnable{
 					}else if(DHServerKey == null) {
 						if(newMessage.contains("Server_DH_Public_Key:")) {
 							DHServerKey = new BigInteger(newMessage.substring(21));
-							
+							lib.setDiffieHellmanB(DHServerKey);
 							//Generate Private Variable
 							Random rand = new SecureRandom();
 							do {  //Make sure that the DHa is smaller then P
@@ -109,20 +146,58 @@ public class Client implements Runnable{
 							} while (DHb.compareTo(DHp) >= 0);
 							
 							//--Transmit Step 5 Public Key
-							commLink.transmitToServer(RSAStringEncode("Client_DH_Public_Key:Sending"));
+							commLink.transmitToServer(lib.RSAStringEncode("Client_DH_Public_Key:Sending"));
 							
-							try { Thread.sleep(20); }
+							try { Thread.sleep(2); }
 					    	catch (InterruptedException e) { e.printStackTrace(); }
 							
-							commLink.transmitToServer(RSAIntEncode(DiffieHellmanKey()));
+							while(true) {
+								try { Thread.sleep(1); }
+						    	catch (InterruptedException e) { e.printStackTrace(); }
+								if(commLink.newMessageFromServer()) {
+									if(commLink.receiveFromServer().equals("Server_ACK")) {
+										commLink.transmitToServer(lib.RSAIntEncode(lib.DiffieHellmanKey(DHg, DHb, DHp)));
+										try { Thread.sleep(2); }
+								    	catch (InterruptedException e) { e.printStackTrace(); }
+										break;
+									}else {
+										System.out.println("Client: Error Occured!");
+										finished = true;
+										break;
+									}
+								}
+							}
 						}else {
 							System.out.println("Client: Error Occured!");
 							finished = true;
 							break;
 						}
+					}else if(CBCInitialVector == null) {
+						if(newMessage.contains("Server_CBC_IV:")) {
+							CBCInitialVector = new BigInteger(newMessage.substring(14));
+							CBCPreviousVector = CBCInitialVector;
+							
+							CTRValue = CBCInitialVector.add(BigInteger.ONE);;
+							
+							//--Transmit Step 6 Test Message
+							//Encrypt with CBC first, then encrypt with AES
+							
+							commLink.transmitToServer(dataExchangeEncrypt(lib.convertToBigInt("Client_DH_Verify")));
+						}
+					}else if(!DHVerified) {
+						String decodedMessage = dataExchangeDecrypt(newMessage);
+						System.out.println("Client <-- Server (AES): "+decodedMessage);
+						if(decodedMessage.contains("Server_DH_Verify")) {
+							
+							//--Transmit Step 7 Data Exchange
+							//Encrypt then send
+							commLink.transmitToServer(dataExchangeEncrypt(lib.convertToBigInt("A user interface is like a joke. You shouldnt have to explain it")));
+						}else {
+							System.out.println("Client: DH Key Not Correct!");
+							finished = true;
+						}
 					}else {
-						finished = true;
-						System.out.println("Client: FINISHED");
+						
 					}
 				}
 			}
@@ -133,32 +208,40 @@ public class Client implements Runnable{
 		}
 	}
 	
-	private BigInteger DiffieHellmanKey() {
-		return DHg.modPow(DHb, DHp);
+	private String dataExchangeDecrypt(String input) {
+		String[] message = input.split(",");
+		byte[] result = new byte[message.length];
+		for(int i = 0; i < message.length; i++) {
+			result[i] = (byte)Integer.parseInt(message[i]);
+		}
+		BigInteger AESMessage = new BigInteger(lib.AESDecrypt(new BigInteger(result)));
+		System.out.println("CBC " + CBCPreviousVector.toString());
+		BigInteger CBCMessage = lib.CBCDecrypt(CBCPreviousVector, AESMessage);
+		System.out.println("CTR " + CTRValue.toString());
+		BigInteger CTRMessage = lib.CTRDecrypt(CBCMessage, CTRValue);
+		String decodedMessage = lib.convertFromBigInt(CTRMessage);
+		CBCPreviousVector = CBCMessage;
+		CTRValue = CTRValue.add(BigInteger.ONE);
+		return decodedMessage;
 	}
 	
-	private BigInteger convertToBigInt(String input) {
-		BigInteger message = null;
-		try {
-			message = new BigInteger(input.getBytes("UTF-8"));
-		} catch (Exception e){
-			e.printStackTrace();
+	private String dataExchangeEncrypt(BigInteger input) {
+		System.out.println("CTR " + CTRValue.toString());
+		BigInteger CTRMessage = lib.CTREncrypt(input, CTRValue);
+		System.out.println("CBC " + CBCPreviousVector.toString());
+		BigInteger CBCMessage = lib.CBCEncrypt(CBCPreviousVector, CTRMessage);
+		CTRValue = CTRValue.add(BigInteger.ONE);
+		System.out.println("Len "+ CBCMessage.toByteArray().length);
+		byte[] result = lib.AESEncrypt(CBCMessage);
+		CBCPreviousVector = CBCMessage;
+		String message = "";
+		for(int i = 0; i < result.length; i++) {
+			message += result[i];
+			if(i < result.length-1) {
+				message += ",";
+			}
 		}
 		return message;
 	}
-	
-	private String RSAStringEncode(String input) {
-		BigInteger message = convertToBigInt(input);
-		//Try to change the input from UTF-8 to bytes which converts to bigIntegers
-		
-		//Encode the message with the public key
-		return message.modPow(RSAe, RSAn).toString();
-	}
-	
-	private String RSAIntEncode(BigInteger input) {
-		//Try to change the input from UTF-8 to bytes which converts to bigIntegers
-		
-		//Encode the message with the public key
-		return input.modPow(RSAe, RSAn).toString();
-	}
+
 }
