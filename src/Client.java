@@ -189,6 +189,7 @@ public class Client implements Runnable{
 						System.out.println("Client <-- Server (AES): "+decodedMessage);
 						if(decodedMessage.contains("Server_DH_Verify")) {
 							
+							DHVerified = true;
 							//--Transmit Step 7 Data Exchange
 							//Encrypt then send
 							commLink.transmitToServer(dataExchangeEncrypt(lib.convertToBigInt("A user interface is like a joke. You shouldnt have to explain it")));
@@ -197,8 +198,11 @@ public class Client implements Runnable{
 							finished = true;
 						}
 					}else {
-						
+						String decodedMessage = dataExchangeDecrypt(newMessage);
+						System.out.println("Client <-- Server (AES): "+decodedMessage);
+						finished = true;
 					}
+					
 				}
 			}
 			if(timeout > TTL) {
@@ -206,6 +210,8 @@ public class Client implements Runnable{
 				break;
 			}
 		}
+		finished = true;
+		System.out.println("Client: STOPPED");
 	}
 	
 	private String dataExchangeDecrypt(String input) {
@@ -215,9 +221,7 @@ public class Client implements Runnable{
 			result[i] = (byte)Integer.parseInt(message[i]);
 		}
 		BigInteger AESMessage = new BigInteger(lib.AESDecrypt(new BigInteger(result)));
-		System.out.println("CBC " + CBCPreviousVector.toString());
 		BigInteger CBCMessage = lib.CBCDecrypt(CBCPreviousVector, AESMessage);
-		System.out.println("CTR " + CTRValue.toString());
 		BigInteger CTRMessage = lib.CTRDecrypt(CBCMessage, CTRValue);
 		String decodedMessage = lib.convertFromBigInt(CTRMessage);
 		CBCPreviousVector = CBCMessage;
@@ -226,14 +230,11 @@ public class Client implements Runnable{
 	}
 	
 	private String dataExchangeEncrypt(BigInteger input) {
-		System.out.println("CTR " + CTRValue.toString());
 		BigInteger CTRMessage = lib.CTREncrypt(input, CTRValue);
-		System.out.println("CBC " + CBCPreviousVector.toString());
 		BigInteger CBCMessage = lib.CBCEncrypt(CBCPreviousVector, CTRMessage);
 		CTRValue = CTRValue.add(BigInteger.ONE);
-		System.out.println("Len "+ CBCMessage.toByteArray().length);
 		byte[] result = lib.AESEncrypt(CBCMessage);
-		CBCPreviousVector = CBCMessage;
+		CBCPreviousVector = CTRMessage;
 		String message = "";
 		for(int i = 0; i < result.length; i++) {
 			message += result[i];
@@ -242,6 +243,10 @@ public class Client implements Runnable{
 			}
 		}
 		return message;
+	}
+	
+	public boolean isFinished() {
+		return finished;
 	}
 
 }

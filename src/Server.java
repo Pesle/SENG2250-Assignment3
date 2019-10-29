@@ -1,7 +1,4 @@
 import java.math.BigInteger;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.Random;
 
@@ -46,15 +43,11 @@ public class Server implements Runnable{
 		RSAq = BigInteger.probablePrime(2048 / 2, rand);
 		
 		//Generate CBCMac Initial Vector
-		MessageDigest digest;
-		try {
-			digest = MessageDigest.getInstance("SHA-256");
-			byte[] encodedhash = digest.digest(Integer.toString(rand.nextInt()).getBytes(StandardCharsets.UTF_8));
-			CBCInitialVector = new BigInteger(encodedhash);
-			CBCPreviousVector = CBCInitialVector;
-		} catch (NoSuchAlgorithmException e) {
-			e.printStackTrace();
-		}
+		Random rd = new Random();
+	    byte[] randBytes = new byte[16];
+	    rd.nextBytes(randBytes);
+		CBCInitialVector = new BigInteger(randBytes);
+		CBCPreviousVector = CBCInitialVector;
 		CTRValue = CBCInitialVector.add(BigInteger.ONE);
 	}
 	
@@ -202,7 +195,7 @@ public class Server implements Runnable{
 					}else if(!DHVerified) {
 						if(decodedMessage.contains("Client_DH_Verify")) {
 							DHVerified = true;
-							//64 Bytes Message
+							//Send DiffieHellman Verification to Client
 							send(dataExchangeEncrypt(lib.convertToBigInt("Server_DH_Verify")));
 						}else {
 							System.out.println("Server: DH Key Not Correct!");
@@ -210,7 +203,9 @@ public class Server implements Runnable{
 						}
 						
 					}else {
-						
+						//64 Bytes Message
+						send(dataExchangeEncrypt(lib.convertToBigInt("Nobody uses Internet Explorer, except to download Chrome/Firefox")));
+						finished = true;
 					}
 				}
 			}
@@ -221,6 +216,8 @@ public class Server implements Runnable{
 				break;
 			}
 		}
+		finished = true;
+		System.out.println("Server: STOPPED");
 	}
 	
 	private void send(String message) {
@@ -243,9 +240,7 @@ public class Server implements Runnable{
 			result[i] = (byte)Integer.parseInt(message[i]);
 		}
 		BigInteger AESMessage = new BigInteger(lib.AESDecrypt(new BigInteger(result)));
-		System.out.println("CBC " + CBCPreviousVector.toString());
 		BigInteger CBCMessage = lib.CBCDecrypt(CBCPreviousVector, AESMessage);
-		System.out.println("CTR " + CTRValue.toString());
 		BigInteger CTRMessage = lib.CTRDecrypt(CBCMessage, CTRValue);
 		String decodedMessage = lib.convertFromBigInt(CTRMessage);
 		CBCPreviousVector = CBCMessage;
@@ -254,14 +249,11 @@ public class Server implements Runnable{
 	}
 	
 	private String dataExchangeEncrypt(BigInteger input) {
-		System.out.println("CTR " + CTRValue.toString());
 		BigInteger CTRMessage = lib.CTREncrypt(input, CTRValue);
-		System.out.println("CBC " + CBCPreviousVector.toString());
 		BigInteger CBCMessage = lib.CBCEncrypt(CBCPreviousVector, CTRMessage);
 		CTRValue = CTRValue.add(BigInteger.ONE);
-		System.out.println("Len "+ CBCMessage.toByteArray().length);
 		byte[] result = lib.AESEncrypt(CBCMessage);
-		CBCPreviousVector = CBCMessage;
+		CBCPreviousVector = CTRMessage;
 		String message = "";
 		for(int i = 0; i < result.length; i++) {
 			message += result[i];
@@ -270,6 +262,10 @@ public class Server implements Runnable{
 			}
 		}
 		return message;
+	}
+	
+	public boolean isFinished() {
+		return finished;
 	}
 	
 }

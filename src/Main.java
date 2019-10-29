@@ -4,16 +4,18 @@ public class Main {
 	public static Connection communicationLink = new Connection();
 	
 	//Initialise Server - ServerID, SessionID
-	private static Thread server = new Thread(new Server(2, 3, communicationLink));
+	private static Server server = new Server(2, 3, communicationLink);
+	private static Thread serverThread = new Thread(server);
 	
 	//Initialise Client - ClientID
-	private static Thread client = new Thread(new Client(1, communicationLink));
+	private static Client client = new Client(1, communicationLink);
+	private static Thread clientThread = new Thread(client);
 	
 	
 	
 	public static void main(String[] args) {
-		server.start();
-		client.start();
+		serverThread.start();
+		clientThread.start();
 	}
 
 }

@@ -15,7 +15,7 @@ public class Connection {
 		 newMessageFromServer = false;
 	}
 	
-	void transmitToClient(String message) {
+	public void transmitToClient(String message) {
 		connectionToClient.addLast(message);
 		try { Thread.sleep(2); }
     	catch (InterruptedException e) { e.printStackTrace(); }
@@ -24,7 +24,7 @@ public class Connection {
     	catch (InterruptedException e) { e.printStackTrace(); }
 	}
 	
-	void transmitToServer(String message) {
+	public void transmitToServer(String message) {
 		connectionToServer.addLast(message);
 		try { Thread.sleep(2); }
     	catch (InterruptedException e) { e.printStackTrace(); }
@@ -33,25 +33,41 @@ public class Connection {
     	catch (InterruptedException e) { e.printStackTrace(); }
 	}
 	
-	String receiveFromClient() {
+	public String receiveFromClient() {
 		newMessageFromServer = false;
 		try { Thread.sleep(2); }
     	catch (InterruptedException e) { e.printStackTrace(); }
 		return connectionToServer.getLast();
 	}
 	
-	String receiveFromServer() {
+	public String receiveFromServer() {
 		newMessageFromClient = false;
 		try { Thread.sleep(2); }
     	catch (InterruptedException e) { e.printStackTrace(); }
 		return connectionToClient.getLast();
 	}
 	
-	boolean newMessageFromServer() {
+	public boolean newMessageFromServer() {
 		return newMessageFromServer;
 	}
 	
-	boolean newMessageFromClient() {
+	public boolean newMessageFromClient() {
 		return newMessageFromClient;
+	}
+	
+	public String toStringClient() {
+		String result = "";
+		for(int i = 0; i < connectionToClient.size(); i++) {
+			result += connectionToClient.get(i)+"\n";
+		}
+		return result;
+	}
+	
+	public String toStringServer() {
+		String result = "";
+		for(int i = 0; i < connectionToServer.size(); i++) {
+			result += connectionToServer.get(i)+"\n";
+		}
+		return result;
 	}
 }
