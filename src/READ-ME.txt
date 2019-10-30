@@ -1,0 +1,13 @@
+----C3282137----
+Ryan Jobse
+SENG2250 S2 2019
+Assignment 3
+
+Compile:
+javac *.java
+
+Run
+java Main
+
+The program has a basic UI allowing the user to choose whether they want
+to run the client, server, or both.
